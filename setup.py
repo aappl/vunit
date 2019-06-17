@@ -49,6 +49,7 @@ setup(
         "vunit.test.unit",
         "vunit.test.acceptance",
         "vunit.ui",
+        "vunit.vc",
         "vunit.vivado",
     ],
     package_data={"vunit": DATA_FILES},

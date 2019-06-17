@@ -18,7 +18,8 @@ from ..builtins import add_verilog_include_dir
 from .common import check_not_empty
 from .source import SourceFile, SourceFileList
 from .testbench import TestBench
-from .packagefacade import PackageFacade
+from .package_facade import PackageFacade
+from .entity import Entity
 
 
 class Library(object):
@@ -290,11 +291,25 @@ class Library(object):
 
         return PackageFacade(self._parent, self._library_name, name, design_unit)
 
-    def entity(self, name):
+    def get_entity(self, name):
         """
         Get an entity within the library
+        """
+        library = self._project.get_library(self._library_name)
+        design_unit = library.primary_design_units.get(name)
 
-        :param name: The name of the entity
+        if design_unit is None:
+            raise KeyError(name)
+        if design_unit.unit_type != "entity":
+            raise KeyError(name)
+
+        return Entity(self._library_name, name, design_unit.source_file)
+
+    def entity(self, name):
+        """
+        Get a test bench within this library
+
+        :param name: The name of the test bench entity
         :returns: A :class:`.TestBench` object
         :raises: KeyError
         """

@@ -5,11 +5,14 @@
 # Copyright (c) 2014-2019, Lars Asplund lars.anders.asplund@gmail.com
 
 from os.path import join, dirname
-from vunit import VUnit
+from vunit import VUnit, ComplianceTest
 
 root = dirname(__file__)
 
 ui = VUnit.from_argv()
+ui.add_com()
+ui.add_verification_components()
+
 lib = ui.add_library("lib")
 lib.add_source_files(join(root, "*.vhd"))
 
@@ -90,4 +93,24 @@ lib.entity("tb_ieee_warning").test("pass").set_sim_option("disable_ieee_warnings
 lib.entity("tb_other_file_tests").scan_tests_from_file(
     join(root, "other_file_tests.vhd")
 )
+
+test_lib = ui.add_library("test_lib")
+ComplianceTest(lib, "vc", "vc_pkg").add_vhdl_testbench(
+    test_lib, join(root, "compliance_test")
+)
+ComplianceTest(
+    lib, "vc_not_supporting_sync", "vc_not_supporting_sync_pkg"
+).add_vhdl_testbench(test_lib, join(root, "compliance_test"))
+ComplianceTest(
+    lib, "vc_not_supporting_custom_actor", "vc_not_supporting_custom_actor_pkg"
+).add_vhdl_testbench(test_lib, join(root, "compliance_test"))
+ComplianceTest(
+    lib, "vc_not_supporting_custom_logger", "vc_not_supporting_custom_logger_pkg"
+).add_vhdl_testbench(test_lib, join(root, "compliance_test"))
+ComplianceTest(
+    lib,
+    "vc_not_supporting_unexpected_msg_handling",
+    "vc_not_supporting_unexpected_msg_handling_pkg",
+).add_vhdl_testbench(test_lib, join(root, "compliance_test"))
+
 ui.main()

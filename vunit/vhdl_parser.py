@@ -307,7 +307,8 @@ class VHDLEntity(object):
         """
         self.generics.append(
             VHDLInterfaceElement(
-                identifier,
+                "constant",
+                [identifier],
                 VHDLSubtypeIndication.parse(subtype_code),
                 init_value=init_value,
             )
@@ -319,7 +320,8 @@ class VHDLEntity(object):
         """
         self.ports.append(
             VHDLInterfaceElement(
-                identifier,
+                "signal",
+                [identifier],
                 VHDLSubtypeIndication.parse(subtype_code),
                 init_value=init_value,
                 mode=mode,
@@ -537,7 +539,11 @@ class VHDLEntity(object):
                 # Ignore function generics
                 continue
 
-            generic_list.append(VHDLInterfaceElement.parse(interface_element))
+            generic_list.append(
+                VHDLInterfaceElement.parse(
+                    interface_element, default_entity_class="constant"
+                )
+            )
 
         return generic_list
 
@@ -556,7 +562,9 @@ class VHDLEntity(object):
         # Add interface elements to the port list
         for interface_element in interface_elements:
             port_list.append(
-                VHDLInterfaceElement.parse(interface_element, is_signal=True)
+                VHDLInterfaceElement.parse(
+                    interface_element, default_entity_class="signal"
+                )
             )
 
         return port_list
@@ -636,8 +644,16 @@ class VHDLInterfaceElement(object):
     Represents a VHDL interface element
     """
 
-    def __init__(self, identifier, subtype_indication, mode=None, init_value=None):
-        self.identifier = identifier
+    def __init__(
+        self,
+        entity_class,
+        identifier_list,
+        subtype_indication,
+        mode=None,
+        init_value=None,
+    ):
+        self.entity_class = entity_class
+        self.identifier_list = identifier_list
         self.mode = mode
         self.subtype_indication = subtype_indication
         self.init_value = init_value
@@ -647,22 +663,31 @@ class VHDLInterfaceElement(object):
         @returns A copy of this interface element without a mode
         """
         return VHDLInterfaceElement(
-            self.identifier, self.subtype_indication, init_value=self.init_value
+            self.entity_class,
+            self.identifier_list,
+            self.subtype_indication,
+            init_value=self.init_value,
         )
 
     @classmethod
-    def parse(cls, code, is_signal=False):
+    def parse(cls, code, default_entity_class=None):
         """
         Returns a new instance by parsing the code
         """
-        if is_signal:
-            # Remove 'signal' string if a signal is beeing parsed
-            code = code.replace("signal", "")
+        entity_class_split = code.split(None, 1)
+        if cls._is_interface_entity_class(entity_class_split[0]):
+            entity_class = entity_class_split[0]
+            code = entity_class_split[1]
+        else:
+            entity_class = default_entity_class
 
         interface_element_string = code
 
-        # Extract the identifier
-        identifier = interface_element_string.split(":")[0].strip()
+        # Extract the identifier_list
+        identifier_list_string = interface_element_string.split(":")[0].strip()
+        identifier_list = [
+            identifier.strip() for identifier in identifier_list_string.split(",")
+        ]
 
         # Extract subtype indication and mode (if any)
 
@@ -683,7 +708,7 @@ class VHDLInterfaceElement(object):
         else:
             init_value = None
 
-        return cls(identifier, subtype_indication, mode, init_value)
+        return cls(entity_class, identifier_list, subtype_indication, mode, init_value)
 
     @staticmethod
     def _is_mode(code):
@@ -692,8 +717,15 @@ class VHDLInterfaceElement(object):
         """
         return code in ("in", "out", "inout", "buffer", "linkage")
 
+    @staticmethod
+    def _is_interface_entity_class(code):
+        """
+        Return True if the code is an interface entity class
+        """
+        return code in ("constant", "variable", "signal", "file")
+
     def __str__(self):
-        code = self.identifier + " : "
+        code = self.identifier_list + " : "
 
         if self.mode is not None:
             code += self.mode + " "
@@ -739,14 +771,6 @@ class VHDLEnumerationType(object):
             yield cls(identifier, literals)
 
 
-class VHDLElementDeclaration(object):
-    """Represents a VHDL element declaration"""
-
-    def __init__(self, identifier_list, subtype_indication):
-        self.identifier_list = identifier_list
-        self.subtype_indication = subtype_indication
-
-
 class VHDLRecordType(object):
     """Represents a VHDL record type"""
 
@@ -788,7 +812,7 @@ class VHDLRecordType(object):
                         identifier_list_and_subtype_indication[1].strip()
                     )
                     parsed_elements.append(
-                        VHDLElementDeclaration(identifier_list, subtype_indication)
+                        VHDLInterfaceElement(None, identifier_list, subtype_indication)
                     )
             yield cls(identifier, parsed_elements)
 
@@ -1100,6 +1124,14 @@ class VHDLReference(object):
         # String "all" may be used to denote all names within
         self.name_within = name_within
 
+    @property
+    def library_name(self):
+        return self.library
+
+    @property
+    def design_unit_name(self):
+        return self.design_unit
+
     def __repr__(self):
         return "VHDLReference(%r, %r, %r, %r)" % (
             self.reference_type,
@@ -1127,8 +1159,65 @@ class VHDLReference(object):
     def is_package_reference(self):
         return self.reference_type == "package"
 
+    def is_context_reference(self):
+        return self.reference_type == "context"
+
     def reference_all_names_within(self):
         return self.name_within == "all"
+
+
+class VHDLFunctionSpecification(object):
+    """
+    Represents a VHDL function specification.
+    """
+
+    def __init__(self, identifier, return_type_mark, parameter_list=None):
+        self.identifier = identifier
+        self.return_type_mark = return_type_mark
+
+        self.parameter_list = parameter_list if parameter_list is not None else []
+
+    _function_specification_re = re.compile(
+        r"""
+            \b                                   # Word boundary
+            function                             # Function keyword
+            \s+                                  # At least one whitespace
+            (?P<id>[a-zA-Z]\w*)                  # Function identifier
+            \s*                                  # Potential whitespaces
+            (?P<parameter_list>\(.*?\))?         # Parameter list
+            \s+                                  # At least one whitespace
+            return                               # Return keyword
+            \s+                                  # At least one whitespace
+            (?P<return_type_mark>[a-zA-Z]\w*)    # Return type mark
+            \s*                                  # Potential whitespaces
+            ;                                    # Semi-colon
+    """,
+        re.MULTILINE | re.IGNORECASE | re.VERBOSE | re.DOTALL,
+    )
+
+    @classmethod
+    def find(cls, code):
+        """
+        Iterate over new instances of VHDLFunctionSpecification for all function specifications within the code.
+        """
+        for function_specification in cls._function_specification_re.finditer(code):
+            identifier = function_specification.group("id")
+            return_type_mark = function_specification.group("return_type_mark")
+
+            parsed_parameter_list = []
+            if function_specification.group("parameter_list"):
+                for element in function_specification.group("parameter_list")[
+                    1:-1
+                ].split(";"):
+                    parsed_parameter_list.append(
+                        VHDLInterfaceElement.parse(
+                            element, default_entity_class="constant"
+                        )
+                    )
+
+            yield VHDLFunctionSpecification(
+                identifier, return_type_mark, parsed_parameter_list
+            )
 
 
 VHDL_REMOVE_COMMENT_RE = re.compile(r"--[^\n]*")

@@ -42,14 +42,14 @@ from .common import LOGGER, select_vhdl_standard, check_not_empty
 from .source import SourceFile, SourceFileList
 from .test import Test  # pylint: disable=unused-import
 from .testbench import TestBench  # pylint: disable=unused-import
-from .packagefacade import PackageFacade  # pylint: disable=unused-import
+from .package_facade import PackageFacade  # pylint: disable=unused-import
 from .library import Library
 from .results import Results
 
 
-class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-methods
+class VUnit(
     object
-):
+):  # pylint: disable=too-many-instance-attributes, too-many-public-methods
     """
     The public interface of VUnit
 
