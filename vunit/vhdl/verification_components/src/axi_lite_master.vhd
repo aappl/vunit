@@ -49,7 +49,7 @@ entity axi_lite_master is
 end entity;
 
 architecture a of axi_lite_master is
-  constant reply_queue, message_queue : queue_t := new_queue;
+  constant reply_queue, message_queue, transaction_token_queue : queue_t := new_queue;
 begin
   main : process
     variable request_msg : msg_t;
@@ -58,13 +58,18 @@ begin
     receive(net, bus_handle.p_actor, request_msg);
     msg_type := message_type(request_msg);
 
+    handle_wait_for_time(net, msg_type, request_msg);
+
     if is_read(msg_type) or is_write(msg_type) then
       push(message_queue, request_msg);
+      push(transaction_token_queue, true);
     elsif msg_type = wait_until_idle_msg then
-      wait until ((bvalid and bready) = '1' or (rvalid and rready) = '1') and is_empty(message_queue) and rising_edge(aclk);
+      if not is_empty(transaction_token_queue) then
+        wait until rising_edge(aclk) and is_empty(transaction_token_queue);
+      end if;
       handle_wait_until_idle(net, msg_type, request_msg);
-    else
-      unexpected_msg_type(msg_type);
+    elsif bus_handle.p_fail_on_unexpected_msg_type then
+      unexpected_msg_type(msg_type, bus_handle.p_logger);
     end if;
   end process;
 
@@ -74,6 +79,7 @@ begin
     variable msg_type : msg_type_t;
     variable w_done, aw_done : boolean;
     variable expected_resp : axi_resp_t;
+    variable transaction_token : boolean;
   begin
     wait until rising_edge(aclk) and not is_empty(message_queue);
 
@@ -93,6 +99,7 @@ begin
       wait until (rvalid and rready) = '1' and rising_edge(aclk);
       rready <= '0';
       check_axi_resp(bus_handle, rresp, expected_resp, "rresp");
+      transaction_token := pop(transaction_token_queue);
 
       if is_visible(bus_handle.p_logger, debug) then
         debug(bus_handle.p_logger,
@@ -130,6 +137,7 @@ begin
       wait until (bvalid and bready) = '1' and rising_edge(aclk);
       bready <= '0';
       check_axi_resp(bus_handle, bresp, expected_resp, "bresp");
+      transaction_token := pop(transaction_token_queue);
 
       if is_visible(bus_handle.p_logger, debug) then
         debug(bus_handle.p_logger,

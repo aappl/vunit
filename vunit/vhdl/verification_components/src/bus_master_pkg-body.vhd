@@ -15,20 +15,36 @@ use work.check_pkg.all;
 
 package body bus_master_pkg is
 
-  impure function new_bus(data_length : natural;
-                          address_length : natural;
+  impure function new_bus(data_length : natural := 32;
+                          address_length : natural := 32;
                           byte_length : natural := 8;
                           logger : logger_t := bus_logger;
-                          actor : actor_t := null_actor) return bus_master_t is
+                          actor : actor_t := null_actor;
+                          checker : checker_t := null_checker;
+                          fail_on_unexpected_msg_type : boolean := true) return bus_master_t is
     variable p_actor : actor_t;
+    variable p_checker : checker_t;
   begin
     p_actor := actor when actor /= null_actor else new_actor;
+
+    if checker = null_checker then
+      if logger = bus_logger then
+        p_checker := bus_checker;
+      else
+        p_checker := new_checker(logger);
+      end if;
+    else
+      p_checker := checker;
+    end if;
 
     return (p_actor => p_actor,
             p_data_length => data_length,
             p_address_length => address_length,
             p_byte_length => byte_length,
-            p_logger => logger);
+            p_logger => logger,
+            p_checker => p_checker,
+            p_fail_on_unexpected_msg_type => fail_on_unexpected_msg_type);
+
   end;
 
   function get_logger(bus_handle : bus_master_t) return logger_t is

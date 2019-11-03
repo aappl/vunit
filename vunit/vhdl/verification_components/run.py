@@ -5,7 +5,7 @@
 # Copyright (c) 2014-2019, Lars Asplund lars.anders.asplund@gmail.com
 
 from os.path import join, dirname
-from vunit import VUnit
+from vunit import VUnit, ComplianceTest
 from itertools import product
 
 root = dirname(__file__)
@@ -132,5 +132,11 @@ for max_waits in [0, 8]:
         name="max_waits=%d" % max_waits, generics=dict(max_waits=max_waits)
     )
 
+test_lib = ui.add_library("test_lib")
+ComplianceTest(lib, "axi_lite_master", "bus_master_pkg").add_vhdl_testbench(
+    test_lib, join(root, "compliance_test")
+)
+
+ui.set_compile_option("rivierapro.vcom_flags", ["-dbg"])
 
 ui.main()

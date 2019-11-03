@@ -10,6 +10,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 
 use work.logger_pkg.all;
+use work.checker_pkg.all;
 context work.com_context;
 use work.sync_pkg.all;
 use work.queue_pkg.all;
@@ -24,6 +25,8 @@ package bus_master_pkg is
     p_address_length : natural;
     p_byte_length : natural;
     p_logger : logger_t;
+    p_checker : checker_t;
+    p_fail_on_unexpected_msg_type : boolean;
   end record;
 
   -- Reference to non-blocking bus command
@@ -31,13 +34,16 @@ package bus_master_pkg is
 
   -- Default logger object for bus master instances
   constant bus_logger : logger_t := get_logger("vunit_lib:bus_master_pkg");
+  constant bus_checker : checker_t := new_checker(bus_logger);
 
   -- Create new handle for bus master VC
-  impure function new_bus(data_length : natural;
-                          address_length : natural;
+  impure function new_bus(data_length : natural := 32;
+                          address_length : natural := 32;
                           byte_length : natural := 8;
                           logger : logger_t := bus_logger;
-                          actor : actor_t := null_actor) return bus_master_t;
+                          actor : actor_t := null_actor;
+                          checker : checker_t := null_checker;
+                          fail_on_unexpected_msg_type : boolean := true) return bus_master_t;
 
   -- Return the logger used by the bus master
   function get_logger(bus_handle : bus_master_t) return logger_t;
